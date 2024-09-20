@@ -114,6 +114,7 @@ for (const hash in json)
         hashes.push(hash);
 }
 
+let files = [];
 for (const hash of hashes)
 {
     // Get the actual module.
@@ -167,6 +168,32 @@ for (const hash of hashes)
     }
     let size = fs.statSync(pdbPath).size;
     console.log(`Size of PDB: ${size}`);
+
+    files.push({
+        modulePath: absolutePath,
+        pdbPath: pdbPath,
+        pdbSize: size
+    });
 }
+
+// Sort files by PDB size descending
+files.sort((a, b) => b.pdbSize - a.pdbSize);
+console.log("Writing CSV...");
+
+// Create CSV of the info
+let csvText = "Module path,PDB path,PDB size\n";
+for (const file of files)
+{
+    csvText +=
+    `${file.modulePath},${file.pdbPath},${file.pdbSize}\n`;
+}
+
+if (!fs.existsSync("./csvs"))
+{
+    fs.mkdirSync("./csvs");
+}
+
+fs.writeFileSync(`./csvs/${moduleName}.csv`, csvText, () => {});
+console.log(`Written to csvs/${moduleName}.csv`);
 
 })();
