@@ -90,7 +90,7 @@ console.log(`Getting symbols for module ${moduleName}`);
 let r = await fetch(`https://winbindex.m417z.com/data/by_filename_compressed/${moduleName}.json.gz`);
 if (r.status != 200)
 {
-    console.log(`Fatal: Request to Winbindex failed with HTTP ${r.status}}`);
+    console.log(`Fatal: Request to Winbindex failed with HTTP ${r.status}`);
     process.exit(1);
 }
 
