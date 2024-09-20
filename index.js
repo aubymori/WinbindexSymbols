@@ -48,8 +48,11 @@ function machineTypeToString(machineType)
 }
 
 // Valid versions to grab from. By default, this is
-// all Vibranium versions.
+// all LTSC + Vibranium versions.
 const VALID_WINDOWS_VERSIONS = [
+    "1507",
+    "1607",
+    "1809",
     "2004",
     "20H2",
     "21H1",
@@ -124,6 +127,8 @@ for (const hash in json)
     if (validFile && obj.fileInfo?.timestamp && obj.fileInfo?.virtualSize)
         hashes.push(hash);
 }
+
+console.log(`There are ${hashes.length} PDBs to obtain`);
 
 let files = [];
 for (const hash of hashes)
