@@ -76,7 +76,7 @@ function makeSymbolServerUrl(peName, timeStamp, imageSize)
 console.log("WinbindexSymbols");
 console.log();
 
-let moduleName = process.argv[2];
+let moduleName = process.argv[2].toLowerCase();
 if (!moduleName)
 {
     console.log("No module name specified");
