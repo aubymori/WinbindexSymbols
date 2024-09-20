@@ -1,0 +1,14 @@
+{
+  "name": "winbindexsymbols",
+  "version": "1.0.0",
+  "description": "Gets symbol files from Winbindex",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "aubymori",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "pako": "^2.1.0"
+  }
+}

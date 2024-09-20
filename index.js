@@ -1,0 +1,172 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at htp://mozilla.org/MPL/2.0/. */
+const pako = require("pako");
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
+
+const IMAGE_FILE_MACHINE_AM33       = 0x1d3;
+const IMAGE_FILE_MACHINE_AMD64      = 0x8664;
+const IMAGE_FILE_MACHINE_ARM        = 0x1c0;
+const IMAGE_FILE_MACHINE_ARMV7      = 0x1c4;
+const IMAGE_FILE_MACHINE_EBC        = 0xebc;
+const IMAGE_FILE_MACHINE_I386       = 0x14c;
+const IMAGE_FILE_MACHINE_IA64       = 0x200;
+const IMAGE_FILE_MACHINE_M32R       = 0x9041;
+const IMAGE_FILE_MACHINE_MIPS16     = 0x266;
+const IMAGE_FILE_MACHINE_MIPSFPU    = 0x366;
+const IMAGE_FILE_MACHINE_MIPSFPU16  = 0x466;
+const IMAGE_FILE_MACHINE_POWERPC    = 0x1f0;
+const IMAGE_FILE_MACHINE_POWERPCFP  = 0x1f1;
+const IMAGE_FILE_MACHINE_R4000      = 0x166;
+const IMAGE_FILE_MACHINE_SH3        = 0x1a2;
+const IMAGE_FILE_MACHINE_SH3E       = 0x01a4;
+const IMAGE_FILE_MACHINE_SH3DSP     = 0x1a3;
+const IMAGE_FILE_MACHINE_SH4        = 0x1a6;
+const IMAGE_FILE_MACHINE_SH5        = 0x1a8;
+const IMAGE_FILE_MACHINE_THUMB      = 0x1c2;
+const IMAGE_FILE_MACHINE_WCEMIPSV2  = 0x169;
+const IMAGE_FILE_MACHINE_R3000      = 0x162;
+const IMAGE_FILE_MACHINE_R10000     = 0x168;
+const IMAGE_FILE_MACHINE_ALPHA      = 0x184;
+const IMAGE_FILE_MACHINE_ALPHA64    = 0x0284;
+const IMAGE_FILE_MACHINE_AXP64      = IMAGE_FILE_MACHINE_ALPHA64;
+const IMAGE_FILE_MACHINE_CEE        = 0xC0EE;
+const IMAGE_FILE_MACHINE_TRICORE    = 0x0520;
+const IMAGE_FILE_MACHINE_CEF        = 0x0CEF;
+
+// Valid versions to grab from. By default, this is
+// all Vibranium versions.
+const VALID_WINDOWS_VERSIONS = [
+    "2004",
+    "20H2",
+    "21H1",
+    "21H2",
+    "22H2"
+];
+
+// Valid PE machine types. By default, this is x86
+// archiectures.
+const VALID_MACHINE_TYPES = [
+    IMAGE_FILE_MACHINE_AMD64,
+    IMAGE_FILE_MACHINE_I386
+];
+
+function makeSymbolServerUrl(peName, timeStamp, imageSize)
+{
+    // "%s/%s/%08X%x/%s" % (serverName, peName, timeStamp, imageSize, peName)
+    // https://randomascii.wordpress.com/2013/03/09/symbols-the-microsoft-way/
+
+    var fileId = ("0000000" + timeStamp.toString(16).toUpperCase()).slice(-8) + imageSize.toString(16).toLowerCase();
+    return "https://msdl.microsoft.com/download/symbols/" + peName + "/" + fileId + "/" + peName;
+}
+
+console.log("WinbindexSymbols");
+console.log();
+
+let moduleName = process.argv[2];
+if (!moduleName)
+{
+    console.log("No module name specified");
+    process.exit(1);
+}
+
+console.log(`Getting symbols for module ${moduleName}`);
+
+(async function() {
+
+let r = await fetch(`https://winbindex.m417z.com/data/by_filename_compressed/${moduleName}.json.gz`);
+if (r.status != 200)
+{
+    console.log(`Fatal: Request to Winbindex failed with HTTP ${r.status}}`);
+    process.exit(1);
+}
+
+let unzipped = pako.ungzip(await r.bytes());
+let json = JSON.parse(new TextDecoder().decode(unzipped));
+
+/* Collect hashes to go through and download */
+let hashes = [];
+for (const hash in json)
+{
+    const obj = json[hash];
+    let validFile = false;
+    for (const ver of VALID_WINDOWS_VERSIONS)
+    {
+        if (obj.windowsVersions[ver])
+        {
+            for (const type of VALID_MACHINE_TYPES)
+            {
+                if (obj.fileInfo?.machineType == type)
+                {
+                    validFile = true;
+                    break;
+                }
+            }
+        }
+
+        if (validFile)
+            break;
+    }
+
+    if (validFile && obj.fileInfo?.timestamp && obj.fileInfo?.virtualSize)
+        hashes.push(hash);
+}
+
+for (const hash of hashes)
+{
+    // Get the actual module.
+    let cachePath = `./cache/${moduleName}/${hash}/${moduleName}`;
+    if (!fs.existsSync(cachePath))
+    {
+        const obj = json[hash];
+        const url = makeSymbolServerUrl(moduleName, obj.fileInfo.timestamp, obj.fileInfo.virtualSize);
+        console.log(`Downloading ${moduleName} from URL ${url}...`);
+        let r = await fetch(url);
+        if (r.status == 200)
+        {
+            console.log("Successful");
+            let dir = `./cache/${moduleName}/${hash}`;
+            if (!fs.existsSync(dir))
+            {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(cachePath, await r.bytes(), (e) => { if (e) console.error(e) });
+        }
+        else
+        {
+            console.log(`Failed with HTTP ${r.status}`);
+        }
+    }
+    else
+    {
+        console.log(`Loading ${moduleName} (${hash}) from cache`);
+    }
+
+    // Don't overload the MS symbol server
+    //await new Promise(r => setTimeout(r, 500));
+
+    // Now, get the symbols.
+    const absolutePath = path.resolve(cachePath);
+    try
+    { 
+        execSync(`.\\bin\\SymbolDownloader.exe "${absolutePath}"`, {});
+    }
+    catch (e)
+    {
+        console.log(e);
+        continue;
+    }
+
+    const pdbPath = fs.readFileSync("./current_pdb.txt", { encoding: "utf8" });
+    if (!fs.existsSync(pdbPath))
+    {
+        console.log("Somehow, the PDB doesn't exist");
+        continue;
+    }
+    let size = fs.statSync(pdbPath).size;
+    console.log(`Size of PDB: ${size}`);
+}
+
+})();
