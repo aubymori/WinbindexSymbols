@@ -6,3 +6,4 @@ Debug/
 Release/
 .vs/
 *.user
+current_pdb.txt

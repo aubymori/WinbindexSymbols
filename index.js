@@ -6,35 +6,46 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const IMAGE_FILE_MACHINE_AM33       = 0x1d3;
-const IMAGE_FILE_MACHINE_AMD64      = 0x8664;
-const IMAGE_FILE_MACHINE_ARM        = 0x1c0;
-const IMAGE_FILE_MACHINE_ARMV7      = 0x1c4;
-const IMAGE_FILE_MACHINE_EBC        = 0xebc;
-const IMAGE_FILE_MACHINE_I386       = 0x14c;
-const IMAGE_FILE_MACHINE_IA64       = 0x200;
-const IMAGE_FILE_MACHINE_M32R       = 0x9041;
-const IMAGE_FILE_MACHINE_MIPS16     = 0x266;
-const IMAGE_FILE_MACHINE_MIPSFPU    = 0x366;
-const IMAGE_FILE_MACHINE_MIPSFPU16  = 0x466;
-const IMAGE_FILE_MACHINE_POWERPC    = 0x1f0;
-const IMAGE_FILE_MACHINE_POWERPCFP  = 0x1f1;
-const IMAGE_FILE_MACHINE_R4000      = 0x166;
-const IMAGE_FILE_MACHINE_SH3        = 0x1a2;
-const IMAGE_FILE_MACHINE_SH3E       = 0x01a4;
-const IMAGE_FILE_MACHINE_SH3DSP     = 0x1a3;
-const IMAGE_FILE_MACHINE_SH4        = 0x1a6;
-const IMAGE_FILE_MACHINE_SH5        = 0x1a8;
-const IMAGE_FILE_MACHINE_THUMB      = 0x1c2;
-const IMAGE_FILE_MACHINE_WCEMIPSV2  = 0x169;
-const IMAGE_FILE_MACHINE_R3000      = 0x162;
-const IMAGE_FILE_MACHINE_R10000     = 0x168;
-const IMAGE_FILE_MACHINE_ALPHA      = 0x184;
-const IMAGE_FILE_MACHINE_ALPHA64    = 0x0284;
-const IMAGE_FILE_MACHINE_AXP64      = IMAGE_FILE_MACHINE_ALPHA64;
-const IMAGE_FILE_MACHINE_CEE        = 0xC0EE;
-const IMAGE_FILE_MACHINE_TRICORE    = 0x0520;
-const IMAGE_FILE_MACHINE_CEF        = 0x0CEF;
+const MACHINE_TYPES = {
+    IMAGE_FILE_MACHINE_AM33: 0x1d3,
+    IMAGE_FILE_MACHINE_AMD64: 0x8664,
+    IMAGE_FILE_MACHINE_ARM: 0x1c0,
+    IMAGE_FILE_MACHINE_ARMV7: 0x1c4,
+    IMAGE_FILE_MACHINE_EBC: 0xebc,
+    IMAGE_FILE_MACHINE_I386: 0x14c,
+    IMAGE_FILE_MACHINE_IA64: 0x200,
+    IMAGE_FILE_MACHINE_M32R: 0x9041,
+    IMAGE_FILE_MACHINE_MIPS16: 0x266,
+    IMAGE_FILE_MACHINE_MIPSFPU: 0x366,
+    IMAGE_FILE_MACHINE_MIPSFPU16: 0x466,
+    IMAGE_FILE_MACHINE_POWERPC: 0x1f0,
+    IMAGE_FILE_MACHINE_POWERPCFP: 0x1f1,
+    IMAGE_FILE_MACHINE_R4000: 0x166,
+    IMAGE_FILE_MACHINE_SH3: 0x1a2,
+    IMAGE_FILE_MACHINE_SH3E: 0x01a4,
+    IMAGE_FILE_MACHINE_SH3DSP: 0x1a3,
+    IMAGE_FILE_MACHINE_SH4: 0x1a6,
+    IMAGE_FILE_MACHINE_SH5: 0x1a8,
+    IMAGE_FILE_MACHINE_THUMB: 0x1c2,
+    IMAGE_FILE_MACHINE_WCEMIPSV2: 0x169,
+    IMAGE_FILE_MACHINE_R3000: 0x162,
+    IMAGE_FILE_MACHINE_R10000: 0x168,
+    IMAGE_FILE_MACHINE_ALPHA: 0x184,
+    IMAGE_FILE_MACHINE_ALPHA64: 0x0284,
+    IMAGE_FILE_MACHINE_CEE: 0xC0EE,
+    IMAGE_FILE_MACHINE_TRICORE: 0x0520,
+    IMAGE_FILE_MACHINE_CEF: 0x0CEF,
+};
+
+function machineTypeToString(machineType)
+{
+    for (const name in MACHINE_TYPES)
+    {
+        if (MACHINE_TYPES[name] == machineType)
+            return name;
+    }
+    return "Unknown machine type";
+}
 
 // Valid versions to grab from. By default, this is
 // all Vibranium versions.
@@ -49,8 +60,8 @@ const VALID_WINDOWS_VERSIONS = [
 // Valid PE machine types. By default, this is x86
 // archiectures.
 const VALID_MACHINE_TYPES = [
-    IMAGE_FILE_MACHINE_AMD64,
-    IMAGE_FILE_MACHINE_I386
+    MACHINE_TYPES.IMAGE_FILE_MACHINE_AMD64,
+    MACHINE_TYPES.IMAGE_FILE_MACHINE_I386
 ];
 
 function makeSymbolServerUrl(peName, timeStamp, imageSize)
@@ -117,11 +128,11 @@ for (const hash in json)
 let files = [];
 for (const hash of hashes)
 {
+    const obj = json[hash];
     // Get the actual module.
     let cachePath = `./cache/${moduleName}/${hash}/${moduleName}`;
     if (!fs.existsSync(cachePath))
     {
-        const obj = json[hash];
         const url = makeSymbolServerUrl(moduleName, obj.fileInfo.timestamp, obj.fileInfo.virtualSize);
         console.log(`Downloading ${moduleName} from URL ${url}...`);
         let r = await fetch(url);
@@ -172,7 +183,9 @@ for (const hash of hashes)
     files.push({
         modulePath: absolutePath,
         pdbPath: pdbPath,
-        pdbSize: size
+        pdbSize: size,
+        machineType: machineTypeToString(obj.fileInfo.machineType),
+        version: obj.fileInfo.version
     });
 }
 
@@ -181,11 +194,17 @@ files.sort((a, b) => b.pdbSize - a.pdbSize);
 console.log("Writing CSV...");
 
 // Create CSV of the info
-let csvText = "Module path,PDB path,PDB size\n";
+let csvText = "Module path,PDB path,PDB size,Machine type,Version\n";
 for (const file of files)
 {
-    csvText +=
-    `${file.modulePath},${file.pdbPath},${file.pdbSize}\n`;
+    csvText += [
+        file.modulePath,
+        file.pdbPath,
+        file.pdbSize,
+        file.machineType,
+        file.version
+    ].join(",");
+    csvText += "\n";
 }
 
 if (!fs.existsSync("./csvs"))
