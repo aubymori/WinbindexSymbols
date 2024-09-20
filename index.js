@@ -156,9 +156,6 @@ for (const hash of hashes)
         console.log(`Loading ${moduleName} (${hash}) from cache`);
     }
 
-    // Don't overload the MS symbol server
-    //await new Promise(r => setTimeout(r, 500));
-
     // Now, get the symbols.
     const absolutePath = path.resolve(cachePath);
     try
